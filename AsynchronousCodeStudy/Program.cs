@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,16 +19,49 @@ namespace AsynchronousCodeStudy
             stopwatch.Start();
             string result = ProcessStringReversalSync();
             stopwatch.Stop();
+            Console.WriteLine($"ProcessStringReversalSync took {stopwatch.ElapsedMilliseconds} ms");
 
-            Console.WriteLine($"ProcessStringReversalSync took {stopwatch.ElapsedMilliseconds} ms: {result}");
             stopwatch.Restart();
-            Task.Factory.StartNew(() => ProcessStringReversalAsync()).Wait();
+            
+            var task = Task<string[]>.Factory.StartNew(() => Map(sentence))
+                .ContinueWith(t => Process(t.Result))
+                    .ContinueWith(t => Reduce(t.Result));
+
             stopwatch.Stop();
-            Console.Write($"ProcessStringReversalASync took {stopwatch.ElapsedMilliseconds} ms: ");
-            foreach (var t in tasks)
-                Console.Write(t.Result);
+
+            Console.Write($"ProcessStringReversalASync took {stopwatch.ElapsedMilliseconds} ms");
         }
 
+
+        #region Async
+
+        public static string[] Map(string sentence) => sentence.Split(' ');
+
+        public static string[] Process(string[] words)
+        {
+            for (int i = 0; i < words.Length; i++)
+            {
+                int index = i;
+                Task.Factory.StartNew(() =>
+                {
+                    words[index] = ReverseString(words[index]);
+                    
+                },
+                TaskCreationOptions.AttachedToParent | TaskCreationOptions.LongRunning);
+            }
+            return words;
+        }
+
+        public static string Reduce(string[] words)
+        {
+            var stringBuilder = new StringBuilder();
+            foreach(var word in words)
+            {
+                stringBuilder.Append(word);
+                stringBuilder.Append(' ');
+            }
+            return stringBuilder.ToString();
+        }
 
         public static void ProcessStringReversalAsync()
         {
@@ -38,7 +72,9 @@ namespace AsynchronousCodeStudy
                     TaskCreationOptions.AttachedToParent | TaskCreationOptions.LongRunning));
 
         }
+        #endregion
 
+        #region Sync
         public static string ProcessStringReversalSync()
         {
             List<string> result = new List<string>();
@@ -49,6 +85,8 @@ namespace AsynchronousCodeStudy
 
             return string.Join(" ", result);
         }
+
+        #endregion
 
         public static string ReverseString(string word)
         {
